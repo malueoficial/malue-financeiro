@@ -136,7 +136,7 @@ def fmt_brl(v: float) -> str:
     )
 
 
-@st.cache_data(ttl=300)  # cache 5 min
+@st.cache_data(ttl=30)  # cache curto (30s) pra pegar mudanças rápido
 def load_data() -> pd.DataFrame:
     """Puxa CSV da agenda e retorna DataFrame."""
     try:
@@ -148,9 +148,9 @@ def load_data() -> pd.DataFrame:
 
 
 # ============================================================
-# Header
+# Header + botão de atualizar
 # ============================================================
-col_logo, col_title = st.columns([1, 8])
+col_logo, col_title, col_refresh = st.columns([1, 6, 2])
 with col_logo:
     try:
         st.image(LOGO_URL, width=80)
@@ -159,9 +159,14 @@ with col_logo:
 with col_title:
     st.markdown(
         '<p class="malue-title">MaLuê <span>Financeiro</span></p>'
-        '<p class="malue-sub">Fluxo de caixa dos shows — dados direto da agenda</p>',
+        '<p class="malue-sub">Fluxo de caixa dos shows — atualiza sozinho a cada 30s</p>',
         unsafe_allow_html=True,
     )
+with col_refresh:
+    st.write("")  # espaço vertical
+    if st.button("🔄 Atualizar agora", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
 
 # ============================================================
 # Carrega e processa dados
@@ -185,11 +190,11 @@ df["_valor_num"] = df.get("Valor", "").apply(parse_valor)
 # Status → limpa
 df["_status"] = df.get("Status", "").fillna("").str.strip()
 
-# Ignora shows sem valor (não conta pro cálculo)
-df = df[df["_valor_num"] > 0].copy()
+# Shows sem valor entram como R$ 0,00 (aparecem na lista mas não somam receita)
+df["_valor_num"] = df["_valor_num"].fillna(0.0)
 
 if df.empty:
-    st.warning("Nenhum show com valor cadastrado ainda.")
+    st.warning("Nenhum show na agenda ainda.")
     st.stop()
 
 # Ano-mês pra agrupar
@@ -380,14 +385,18 @@ if meses_com_shows:
     if df_mes.empty:
         st.caption("Nenhum show nesse mês.")
     else:
-        # Monta lista simples: Contratante + Valor
+        # Monta lista: Dia + Contratante + Valor
         contratante_col = df_mes.get("Contratante", pd.Series([""] * len(df_mes))).astype(str).str.strip()
         # Se o contratante estiver vazio, usa o Local como fallback
         local_col = df_mes.get("Local", pd.Series([""] * len(df_mes))).astype(str).str.strip()
         nome_col = contratante_col.where(contratante_col != "", local_col)
         nome_col = nome_col.where(nome_col != "", "(sem nome)")
 
+        # Dia do show (só o dia do mês, ex: "22")
+        dia_col = df_mes["_data_dt"].dt.strftime("%d/%m").values
+
         view = pd.DataFrame({
+            "Dia": dia_col,
             "Contratante": nome_col.values,
             "Valor": df_mes["_valor_num"].apply(fmt_brl).values,
         })
