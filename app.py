@@ -308,11 +308,17 @@ df_ano = df[df["_ano"] == ano_selecionado].copy()
 # ============================================================
 st.subheader(f"📊 Receita mensal — {ano_selecionado}")
 
-# Agrupa por mês do ano selecionado
+# Agrupa por mês do ano selecionado (mantém ordem cronológica)
 receita_mes = (
     df_ano.groupby("_mes")["_valor_num"].sum().reindex(range(1, 13), fill_value=0)
 )
-receita_mes.index = [MESES_ABREV[m - 1] for m in receita_mes.index]
+# Categorical ordenada pra o Streamlit não ordenar alfabeticamente
+labels_ord = [MESES_ABREV[m - 1] for m in range(1, 13)]
+receita_mes.index = pd.Categorical(
+    [MESES_ABREV[m - 1] for m in receita_mes.index],
+    categories=labels_ord,
+    ordered=True,
+)
 receita_mes = receita_mes.rename("Receita (R$)")
 
 st.bar_chart(receita_mes, height=280, color="#ccff33")
