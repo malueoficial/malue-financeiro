@@ -361,54 +361,51 @@ with col_c:
 st.divider()
 
 # ============================================================
-# Breakdown por tipo de evento
+# Ver shows de um mês específico
 # ============================================================
-st.subheader(f"🎤 Por tipo de evento — {ano_selecionado}")
+st.subheader(f"🔎 Shows por mês — {ano_selecionado}")
 
-tipo_col = df_ano.get("Tipo Evento", pd.Series([""] * len(df_ano)))
-if not tipo_col.empty and tipo_col.astype(str).str.strip().any():
-    df_ano["_tipo"] = tipo_col.astype(str).str.strip().replace("", "Sem tipo")
-    tipo_grp = df_ano.groupby("_tipo").agg(
-        Shows=("_valor_num", "count"),
-        Receita=("_valor_num", "sum"),
-    ).reset_index()
-    tipo_grp = tipo_grp.sort_values("Receita", ascending=False)
-    tipo_grp["Receita_num"] = tipo_grp["Receita"]
-    tipo_grp["Receita"] = tipo_grp["Receita"].apply(fmt_brl)
-    tipo_grp["%"] = (
-        (tipo_grp["Receita_num"] / total_receita * 100).round(1).astype(str) + "%"
-    )
-    tipo_view = tipo_grp[["_tipo", "Shows", "Receita", "%"]].rename(
-        columns={"_tipo": "Tipo"}
-    )
-    st.dataframe(tipo_view, use_container_width=True, hide_index=True)
-else:
-    st.caption("Nenhum tipo de evento cadastrado.")
+# Só mostra meses que têm shows
+meses_com_shows = sorted(df_ano["_mes"].unique().tolist())
+if meses_com_shows:
+    opcoes_mes = [f"{MESES_PT[m - 1]}" for m in meses_com_shows]
+    mes_map = {opcoes_mes[i]: meses_com_shows[i] for i in range(len(opcoes_mes))}
+    mes_escolhido = st.selectbox("Ver shows de qual mês?", options=opcoes_mes)
+    mes_num = mes_map[mes_escolhido]
 
-# ============================================================
-# Top contratantes
-# ============================================================
-st.subheader(f"🏆 Top contratantes — {ano_selecionado}")
+    df_mes = df_ano[df_ano["_mes"] == mes_num].copy()
+    # Ordena por data crescente pra ver na sequência do mês
+    df_mes = df_mes.sort_values("_data_dt")
 
-cont_col = df_ano.get("Contratante", pd.Series([""] * len(df_ano)))
-if not cont_col.empty and cont_col.astype(str).str.strip().any():
-    df_ano["_contratante"] = cont_col.astype(str).str.strip()
-    df_ano_c = df_ano[df_ano["_contratante"] != ""]
-    if not df_ano_c.empty:
-        cont_grp = df_ano_c.groupby("_contratante").agg(
-            Shows=("_valor_num", "count"),
-            Receita=("_valor_num", "sum"),
-        ).reset_index()
-        cont_grp = cont_grp.sort_values("Receita", ascending=False).head(10)
-        cont_grp["Receita"] = cont_grp["Receita"].apply(fmt_brl)
-        cont_view = cont_grp[["_contratante", "Shows", "Receita"]].rename(
-            columns={"_contratante": "Contratante"}
-        )
-        st.dataframe(cont_view, use_container_width=True, hide_index=True)
+    if df_mes.empty:
+        st.caption("Nenhum show nesse mês.")
     else:
-        st.caption("Nenhum contratante cadastrado.")
+        # Monta lista simples: Contratante + Valor
+        contratante_col = df_mes.get("Contratante", pd.Series([""] * len(df_mes))).astype(str).str.strip()
+        # Se o contratante estiver vazio, usa o Local como fallback
+        local_col = df_mes.get("Local", pd.Series([""] * len(df_mes))).astype(str).str.strip()
+        nome_col = contratante_col.where(contratante_col != "", local_col)
+        nome_col = nome_col.where(nome_col != "", "(sem nome)")
+
+        view = pd.DataFrame({
+            "Contratante": nome_col.values,
+            "Valor": df_mes["_valor_num"].apply(fmt_brl).values,
+        })
+        st.dataframe(view, use_container_width=True, hide_index=True)
+
+        # Total do mês
+        total_mes_sel = df_mes["_valor_num"].sum()
+        n_mes_sel = len(df_mes)
+        st.markdown(
+            _card(
+                f"Total de {mes_escolhido}",
+                fmt_brl(total_mes_sel),
+                f"{n_mes_sel} show{'s' if n_mes_sel != 1 else ''}",
+            ),
+            unsafe_allow_html=True,
+        )
 else:
-    st.caption("Nenhum contratante cadastrado.")
+    st.caption("Nenhum show cadastrado em nenhum mês desse ano.")
 
 # ============================================================
 # Rodapé — Última atualização + link pra admin
